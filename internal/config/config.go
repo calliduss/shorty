@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	Environment string     `yaml:"env"`
-	StoragePath string     `yaml:"storage_path"`
-	HTTPServer  HTTPServer `yaml:"http_server"`
+	Environment string `yaml:"env"`
+	StoragePath string `yaml:"storage_path"`
+	HTTPServer  `yaml:"http_server"`
 }
 
 type HTTPServer struct {

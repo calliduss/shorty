@@ -5,6 +5,7 @@ import (
 	"os"
 	"shorty/internal/config"
 	"shorty/internal/pkg/logger/slo"
+	"shorty/internal/server"
 	"shorty/internal/storage/sqlite"
 )
 
@@ -22,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	//todo: init router: chi, chi render
+	router := server.SetupRouter(storage, *cfg, log)
 	//todo: run server
 }
 
