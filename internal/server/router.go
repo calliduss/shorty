@@ -27,7 +27,7 @@ func SetupRouter(st *sqlite.Storage, cfg config.Config, log *slog.Logger) http.H
 		middleware.Logger,
 		mwLogger.New(log),
 		middleware.Recoverer,
-		middleware.URLFormat,
+		middleware.URLFormat, // /{alias}
 	)
 
 	r.Route("/v1", func(r chi.Router) {
@@ -42,7 +42,7 @@ func (ro *router) registerHandlers(r chi.Router, cfg config.Config) {
 		cfg.HTTPServer.User: cfg.HTTPServer.Password,
 	}))
 
-	r.Get("/{alias}", ro.getURLHandler)
+	r.Get("/{alias}", ro.redirectHandler)
 	r.Route("/url", func(r chi.Router) {
 		r.Post("/", ro.saveAliasHandler)
 		r.Delete("/delete_user_alias", ro.deleteAliasHandler)
