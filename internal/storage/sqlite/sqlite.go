@@ -14,16 +14,16 @@ type Storage struct {
 }
 
 const (
-	OperationNew    = "storage.sqlite.New"
-	OperationSave   = "storage.sqlite.SaveURL"
-	OperationGet    = "storage.sqlite.GetURL"
-	OperationDelete = "storage.sqlite.DeleteURL"
+	operationNew    = "storage.sqlite.New"
+	operationSave   = "storage.sqlite.SaveURL"
+	operationGet    = "storage.sqlite.GetURL"
+	operationDelete = "storage.sqlite.DeleteURL"
 )
 
 func New(dbPath string) (*Storage, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", OperationNew, err)
+		return nil, fmt.Errorf("%s: %w", operationNew, err)
 	}
 
 	statement, err := db.Prepare(`
@@ -35,12 +35,12 @@ func New(dbPath string) (*Storage, error) {
 		);
 	CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);`)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", OperationNew, err)
+		return nil, fmt.Errorf("%s: %w", operationNew, err)
 	}
 
 	_, err = statement.Exec()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", OperationNew, err)
+		return nil, fmt.Errorf("%s: %w", operationNew, err)
 	}
 
 	return &Storage{db: db}, nil
@@ -49,7 +49,7 @@ func New(dbPath string) (*Storage, error) {
 func (s *Storage) SaveURL(url string, alias string) (int64, error) {
 	statement, err := s.db.Prepare(`INSERT INTO url(url, alias, created_at) VALUES(?, ?, ?)`)
 	if err != nil {
-		return 0, fmt.Errorf("%s: prepare statement: %w", OperationSave, err)
+		return 0, fmt.Errorf("%s: prepare statement: %w", operationSave, err)
 	}
 
 	result, err := statement.Exec(url, alias, time.Now().UTC().Format(time.DateTime))
@@ -58,14 +58,14 @@ func (s *Storage) SaveURL(url string, alias string) (int64, error) {
 		if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
 
 			//if an url was added with an alias that was previously saved, then we throw an error
-			return 0, fmt.Errorf("%s: %w", OperationSave, storage.ErrURLAlreadyExists)
+			return 0, fmt.Errorf("%s: %w", operationSave, storage.ErrURLAlreadyExists)
 		}
-		return 0, fmt.Errorf("%s: %w", OperationSave, err)
+		return 0, fmt.Errorf("%s: %w", operationSave, err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("%s: failed to get last insert id %w", OperationSave, err)
+		return 0, fmt.Errorf("%s: failed to get last insert id %w", operationSave, err)
 	}
 
 	return id, nil
@@ -76,7 +76,7 @@ func (s *Storage) GetURL(alias string) (string, error) {
 
 	statement, err := s.db.Prepare(`SELECT url FROM url WHERE alias = ?`)
 	if err != nil {
-		return "", fmt.Errorf("%s: prepare statement: %w", OperationGet, err)
+		return "", fmt.Errorf("%s: prepare statement: %w", operationGet, err)
 	}
 
 	err = statement.QueryRow(alias).Scan(&resultURL)
@@ -84,7 +84,7 @@ func (s *Storage) GetURL(alias string) (string, error) {
 		if err == sql.ErrNoRows {
 			return "", storage.ErrURLNotFound
 		}
-		return "", fmt.Errorf("%s: execute statement %w", OperationGet, err)
+		return "", fmt.Errorf("%s: execute statement %w", operationGet, err)
 	}
 
 	return resultURL, nil
@@ -93,12 +93,12 @@ func (s *Storage) GetURL(alias string) (string, error) {
 func (s *Storage) DeleteURL(alias string) error {
 	statement, err := s.db.Prepare(`DELETE FROM url WHERE alias = ?`)
 	if err != nil {
-		return fmt.Errorf("%s: prepare statement: %w", OperationDelete, err)
+		return fmt.Errorf("%s: prepare statement: %w", operationDelete, err)
 	}
 
 	_, err = statement.Exec(alias)
 	if err != nil {
-		return fmt.Errorf("%s: execute statement %w", OperationDelete, err)
+		return fmt.Errorf("%s: execute statement %w", operationDelete, err)
 	}
 
 	return nil

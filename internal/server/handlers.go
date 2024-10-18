@@ -85,7 +85,7 @@ func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ro.log.Info("url saved successfully", slog.Int64("id", id))
+	ro.log.Info("url successfully saved", slog.Int64("id", id))
 
 	render.JSON(w, r, Response{
 		Response: resp.OK(),
@@ -128,4 +128,30 @@ func (ro *router) redirectHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, result, http.StatusFound)
 }
 
-func (ro *router) deleteAliasHandler(w http.ResponseWriter, r *http.Request) {}
+func (ro *router) deleteAliasHandler(w http.ResponseWriter, r *http.Request) {
+	const operation = "handlers.url.delete"
+
+	ro.log.With(
+		slog.String("operation", operation),
+		slog.String("request_id", middleware.GetReqID(r.Context())),
+	)
+
+	alias := chi.URLParam(r, "alias")
+	if alias == "" {
+		ro.log.Info("alias is empty")
+		render.JSON(w, r, resp.Error("invalid request"))
+
+		return
+	}
+
+	err := ro.storage.DeleteURL(alias)
+	if err != nil {
+		ro.log.Error("failed to delete url", slog.String("alias", alias))
+		render.JSON(w, r, resp.Error("internal error"))
+
+		return
+	}
+
+	ro.log.Info("alias successfully deleted", slog.String("alias", alias))
+	w.WriteHeader(http.StatusOK)
+}
