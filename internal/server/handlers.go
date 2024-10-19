@@ -18,6 +18,7 @@ type RouterApp interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 	GetURL(alias string) (string, error)
 	DeleteURL(alias string) error
+	UpdateAlias(oldAlias string, newAlias string) error
 }
 
 type Request struct {
@@ -25,19 +26,29 @@ type Request struct {
 	Alias string `json:"alias,omitempty"`
 }
 
+type UpdateRequest struct {
+	NewAlias string `json:"new_alias" validate:"required"`
+}
+
 type Response struct {
 	resp.Response
 	Alias string `json:"alias,omitempty"`
 }
 
+const (
+	handlersOperationSaveURL     = "handlers.url.save"
+	handlersOperationRedirect    = "handlers.url.redirect"
+	handlersOperationDelete      = "handlers.url.delete"
+	handlersOperationUpdateAlias = "handlers.url.update"
+)
+
 const aliasLength = 5
 
 func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
-	const operation = "handlers.url.save"
 	var req Request
 
 	ro.log.With(
-		slog.String("operation", operation),
+		slog.String("operation", handlersOperationSaveURL),
 		slog.String("request_id", middleware.GetReqID(r.Context())), //req tracing
 	)
 
@@ -45,7 +56,6 @@ func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 	err := render.DecodeJSON(r.Body, &req)
 	if err != nil {
 		ro.log.Error("failed to decode request body", slo.Err(err))
-
 		render.JSON(w, r, resp.Error("failed to decode request"))
 
 		return
@@ -94,10 +104,8 @@ func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ro *router) redirectHandler(w http.ResponseWriter, r *http.Request) {
-	const operation = "handlers.url.redirect"
-
 	ro.log.With(
-		slog.String("operation", operation),
+		slog.String("operation", handlersOperationRedirect),
 		slog.String("request_id", middleware.GetReqID(r.Context())),
 	)
 
@@ -129,10 +137,8 @@ func (ro *router) redirectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ro *router) deleteAliasHandler(w http.ResponseWriter, r *http.Request) {
-	const operation = "handlers.url.delete"
-
 	ro.log.With(
-		slog.String("operation", operation),
+		slog.String("operation", handlersOperationDelete),
 		slog.String("request_id", middleware.GetReqID(r.Context())),
 	)
 
@@ -154,4 +160,72 @@ func (ro *router) deleteAliasHandler(w http.ResponseWriter, r *http.Request) {
 
 	ro.log.Info("alias successfully deleted", slog.String("alias", alias))
 	w.WriteHeader(http.StatusOK)
+}
+
+func (ro *router) updateAliasHandler(w http.ResponseWriter, r *http.Request) {
+	var req UpdateRequest
+
+	ro.log.With(
+		slog.String("operation", handlersOperationUpdateAlias),
+		slog.String("request_id", middleware.GetReqID(r.Context())),
+	)
+
+	oldAlias := chi.URLParam(r, "alias")
+	if oldAlias == "" {
+		ro.log.Info("alias is empty")
+		render.JSON(w, r, resp.Error("invalid request"))
+
+		return
+	}
+
+	err := render.DecodeJSON(r.Body, &req)
+	if err != nil {
+		ro.log.Error("failed to decode request body", slo.Err(err))
+		render.JSON(w, r, resp.Error("failed to decode request"))
+
+		return
+	}
+
+	ro.log.Info("request body decoded successfully", slog.Any("request", req))
+
+	err = validator.New().Struct(req)
+	if err != nil {
+		validateErr := err.(validator.ValidationErrors)
+		ro.log.Error("invalid request", slo.Err(err))
+
+		//human-readable error text for a client
+		render.JSON(w, r, resp.ValidationError(validateErr))
+
+		return
+	}
+
+	newAlias := req.NewAlias
+	if newAlias == "" {
+		ro.log.Info("alias was not updated because the field with the new alias is empty")
+		render.JSON(w, r, resp.Error("invalid request: new alias is empty"))
+		//TODO: check alias uniqueness
+
+		return
+	}
+
+	if len(newAlias) < aliasLength {
+		ro.log.Info("new alias is too short", slog.String("new_alias", newAlias))
+		render.JSON(w, r, resp.Error("invalid request: new alias is too short"))
+
+		return
+	}
+
+	err = ro.storage.UpdateAlias(oldAlias, newAlias)
+	if err != nil {
+		ro.log.Error("failed to update alias", slog.String("old_alias", oldAlias), slog.String("new_alias", newAlias))
+		render.JSON(w, r, resp.Error("internal error"))
+
+		return
+	}
+
+	ro.log.Info("alias successfully updated", slog.String("old_alias", oldAlias), slog.String("new_alias", newAlias))
+	render.JSON(w, r, Response{
+		Response: resp.OK(),
+		Alias:    newAlias,
+	})
 }

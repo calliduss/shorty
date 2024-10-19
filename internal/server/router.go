@@ -46,5 +46,6 @@ func (ro *router) registerHandlers(r chi.Router, cfg config.Config) {
 	r.Route("/url", func(r chi.Router) {
 		r.Post("/", ro.saveAliasHandler)
 		r.Delete("/{alias}", ro.deleteAliasHandler)
+		r.Patch("/{alias}", ro.updateAliasHandler)
 	})
 }
