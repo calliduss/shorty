@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
+	"io"
 	"log/slog"
 	"net/http"
 	resp "shorty/internal/pkg/api/response"
@@ -14,7 +15,9 @@ import (
 	"shorty/internal/storage"
 )
 
-type RouterApp interface {
+//go:generate mockgen -source=handlers.go -destination=mocks/handlers.go -package=mocks
+
+type UrlProvider interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 	GetURL(alias string) (string, error)
 	DeleteURL(alias string) error
@@ -54,6 +57,13 @@ func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 
 	//parse request
 	err := render.DecodeJSON(r.Body, &req)
+	if errors.Is(err, io.EOF) {
+		ro.log.Error("request body is empty")
+		render.JSON(w, r, resp.Error("empty request"))
+
+		return
+	}
+
 	if err != nil {
 		ro.log.Error("failed to decode request body", slo.Err(err))
 		render.JSON(w, r, resp.Error("failed to decode request"))

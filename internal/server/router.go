@@ -7,17 +7,16 @@ import (
 	"net/http"
 	"shorty/internal/config"
 	mwLogger "shorty/internal/server/middleware/logger"
-	"shorty/internal/storage/sqlite"
 )
 
 type router struct {
-	storage sqlite.Storage
+	storage UrlProvider
 	log     *slog.Logger
 }
 
-func SetupRouter(st *sqlite.Storage, cfg config.Config, log *slog.Logger) http.Handler {
+func SetupRouter(storage UrlProvider, cfg config.Config, log *slog.Logger) http.Handler {
 	ro := &router{
-		storage: *st,
+		storage: storage,
 		log:     log,
 	}
 
