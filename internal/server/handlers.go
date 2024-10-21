@@ -189,6 +189,13 @@ func (ro *router) updateAliasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := render.DecodeJSON(r.Body, &req)
+	if errors.Is(err, io.EOF) {
+		ro.log.Error("request body is empty")
+		render.JSON(w, r, resp.Error("empty request"))
+
+		return
+	}
+
 	if err != nil {
 		ro.log.Error("failed to decode request body", slo.Err(err))
 		render.JSON(w, r, resp.Error("failed to decode request"))
@@ -221,6 +228,13 @@ func (ro *router) updateAliasHandler(w http.ResponseWriter, r *http.Request) {
 	if len(newAlias) < aliasLength {
 		ro.log.Info("new alias is too short", slog.String("new_alias", newAlias))
 		render.JSON(w, r, resp.Error("invalid request: new alias is too short"))
+
+		return
+	}
+
+	if newAlias == oldAlias {
+		ro.log.Info("new alias is the same as the old one", slog.String("new_alias", newAlias), slog.String("old_alias", oldAlias))
+		render.JSON(w, r, resp.Error("new alias is the same as the old one"))
 
 		return
 	}

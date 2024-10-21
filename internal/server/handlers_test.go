@@ -186,3 +186,101 @@ func TestRedirectHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateHandler(t *testing.T) {
+	tests := map[string]struct {
+		oldAlias     string
+		newAlias     string
+		input        string
+		expectedResp Response
+		wantErr      error
+		prepare      func(mockUrlProvider *mocks.MockUrlProvider)
+	}{
+		"Successfully updated alias": {
+			oldAlias: "youtb",
+			newAlias: "qwert",
+			input:    `{"new_alias": "qwert"}`,
+			expectedResp: Response{
+				Response: resp.OK(),
+				Alias:    "qwert",
+			},
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).Return(nil)
+			},
+		},
+		"Empty request": {
+			oldAlias: "youtb",
+			wantErr:  errors.New("empty request"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).AnyTimes()
+			},
+		},
+		"Missed mandatory field: new_alias": {
+			oldAlias: "youtb",
+			input:    `{}`,
+			wantErr:  errors.New("\"NewAlias\" field is mandatory"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).AnyTimes()
+			},
+		},
+		"new_alias is too short": {
+			oldAlias: "youtb",
+			input:    `{"new_alias": "qw"}`,
+			wantErr:  errors.New("invalid request: new alias is too short"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).AnyTimes()
+			},
+		},
+		"Same alias": {
+			oldAlias: "youtb",
+			input:    `{"new_alias": "youtb"}`,
+			wantErr:  errors.New("new alias is the same as the old one"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).AnyTimes()
+			},
+		},
+		"Internal error": {
+			oldAlias: "youtb",
+			input:    `{"new_alias": "qwert"}`,
+			wantErr:  errors.New("internal error"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().UpdateAlias(gomock.Any(), gomock.Any()).Return(errors.New("unexpected error"))
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStorage := mocks.NewMockUrlProvider(ctrl)
+			tc.prepare(mockStorage)
+			cfg := &config.Config{
+				HTTPServer: config.HTTPServer{
+					User:     "test",
+					Password: "qwerty123",
+				},
+			}
+			r := SetupRouter(mockStorage, *cfg, slog.Default())
+			req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/url/%s", tc.oldAlias), bytes.NewReader([]byte(tc.input)))
+			req.SetBasicAuth(cfg.HTTPServer.User, cfg.HTTPServer.Password)
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, w.Code, http.StatusOK)
+			b := w.Body.String()
+
+			var response Response
+			require.NoError(t, json.Unmarshal([]byte(b), &response))
+
+			if tc.wantErr != nil {
+				assert.Equal(t, tc.wantErr.Error(), response.Error)
+			} else {
+				assert.Equal(t, tc.expectedResp.Status, response.Status)
+				assert.Equal(t, tc.expectedResp, response)
+			}
+		})
+	}
+}
