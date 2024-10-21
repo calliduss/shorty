@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -49,27 +50,27 @@ func TestSaveHandler(t *testing.T) {
 		},
 		"Empty URL": {
 			input:   `{"alias": "55555"}`,
-			wantErr: fmt.Errorf("\"URL\" field is mandatory"),
+			wantErr: errors.New("\"URL\" field is mandatory"),
 			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
 				mockUrlProvider.EXPECT().SaveURL(gomock.Any(), gomock.Any()).AnyTimes()
 			},
 		},
 		"Failed to save url": {
 			input:   `{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}`,
-			wantErr: fmt.Errorf("failed to save url"),
+			wantErr: errors.New("failed to save url"),
 			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
 				mockUrlProvider.EXPECT().SaveURL(gomock.Any(), gomock.Any()).Return(int64(0), errors.New("cannot prepare sql statement"))
 			},
 		},
 		"Url already exists": {
 			input:   `{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}`,
-			wantErr: fmt.Errorf("url already exists"),
+			wantErr: errors.New("url already exists"),
 			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
 				mockUrlProvider.EXPECT().SaveURL(gomock.Any(), gomock.Any()).Return(int64(0), fmt.Errorf("%s: %w", "storage.sqlite.SaveURL", storage.ErrURLAlreadyExists))
 			},
 		},
-		"EOF": {
-			wantErr: fmt.Errorf("empty request"),
+		"Empty request": {
+			wantErr: errors.New("empty request"),
 			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
 				mockUrlProvider.EXPECT().SaveURL(gomock.Any(), gomock.Any()).AnyTimes()
 			},
@@ -95,7 +96,7 @@ func TestSaveHandler(t *testing.T) {
 			req = httptest.NewRequest(http.MethodPost, "/v1/url", bytes.NewReader([]byte(tc.input)))
 			req.SetBasicAuth(cfg.HTTPServer.User, cfg.HTTPServer.Password)
 
-			//response recorder to store response from the handler
+			//response recorder to capture a response from the handler
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, req)
 
@@ -114,6 +115,73 @@ func TestSaveHandler(t *testing.T) {
 				if tc.alias != "" {
 					assert.Equal(t, tc.expectedResp.Alias, response.Alias)
 				}
+			}
+		})
+	}
+}
+
+func TestRedirectHandler(t *testing.T) {
+	tests := map[string]struct {
+		alias    string
+		url      string
+		wantErr  error
+		wantCode int
+		prepare  func(mockUrlProvider *mocks.MockUrlProvider)
+	}{
+		"Success": {
+			alias:    "youtb",
+			url:      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			wantCode: http.StatusFound,
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().GetURL(gomock.Any()).Return("https://www.youtube.com/watch?v=dQw4w9WgXcQ", nil)
+			},
+		},
+		"Url does not exist": {
+			alias:    "youtb",
+			wantCode: http.StatusOK,
+			wantErr:  errors.New("url not found for given alias"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().GetURL(gomock.Any()).Return("", storage.ErrURLNotFound)
+			},
+		},
+		"Internal error": {
+			alias:    "youtb",
+			wantCode: http.StatusOK,
+			wantErr:  errors.New("internal error"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().GetURL(gomock.Any()).Return("", errors.New("unexpected error"))
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStorage := mocks.NewMockUrlProvider(ctrl)
+			tc.prepare(mockStorage)
+
+			r := &router{
+				storage: mockStorage,
+				log:     slog.Default(),
+			}
+
+			chiRouter := chi.NewRouter()
+			chiRouter.Get("/v1/{alias}", r.redirectHandler)
+
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/v1/%s", tc.alias), nil)
+			w := httptest.NewRecorder()
+			chiRouter.ServeHTTP(w, req)
+			require.Equal(t, tc.wantCode, w.Code)
+
+			if tc.wantErr != nil {
+				b := w.Body.String()
+				var response Response
+				require.NoError(t, json.Unmarshal([]byte(b), &response))
+				assert.Equal(t, tc.wantErr.Error(), response.Error)
+			} else {
+				assert.Equal(t, tc.url, w.Header().Get("Location"))
 			}
 		})
 	}
