@@ -85,16 +85,10 @@ func TestSaveHandler(t *testing.T) {
 			defer ctrl.Finish()
 			mockStorage := mocks.NewMockUrlProvider(ctrl)
 			tc.prepare(mockStorage)
-			cfg := &config.Config{
-				HTTPServer: config.HTTPServer{
-					User:     "test",
-					Password: "qwerty123",
-				},
-			}
-			handler := SetupRouter(mockStorage, *cfg, slog.Default())
+			handler := SetupRouter(mockStorage, config.Config{}, slog.Default())
 			var req *http.Request
 			req = httptest.NewRequest(http.MethodPost, "/v1/url", bytes.NewReader([]byte(tc.input)))
-			req.SetBasicAuth(cfg.HTTPServer.User, cfg.HTTPServer.Password)
+			req.SetBasicAuth("", "")
 
 			//response recorder to capture a response from the handler
 			w := httptest.NewRecorder()
@@ -256,15 +250,9 @@ func TestUpdateHandler(t *testing.T) {
 
 			mockStorage := mocks.NewMockUrlProvider(ctrl)
 			tc.prepare(mockStorage)
-			cfg := &config.Config{
-				HTTPServer: config.HTTPServer{
-					User:     "test",
-					Password: "qwerty123",
-				},
-			}
-			r := SetupRouter(mockStorage, *cfg, slog.Default())
+			r := SetupRouter(mockStorage, config.Config{}, slog.Default())
 			req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/url/%s", tc.oldAlias), bytes.NewReader([]byte(tc.input)))
-			req.SetBasicAuth(cfg.HTTPServer.User, cfg.HTTPServer.Password)
+			req.SetBasicAuth("", "")
 
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
