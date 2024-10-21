@@ -266,8 +266,56 @@ func TestUpdateHandler(t *testing.T) {
 			if tc.wantErr != nil {
 				assert.Equal(t, tc.wantErr.Error(), response.Error)
 			} else {
-				assert.Equal(t, tc.expectedResp.Status, response.Status)
 				assert.Equal(t, tc.expectedResp, response)
+			}
+		})
+	}
+}
+
+func TestDeleteHandler(t *testing.T) {
+	tests := map[string]struct {
+		alias   string
+		wantErr error
+		prepare func(mockUrlProvider *mocks.MockUrlProvider)
+	}{
+		"Successfully deleted url": {
+			alias: "youtb",
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().DeleteURL(gomock.Any()).Return(nil)
+			},
+		},
+		"Internal error": {
+			alias:   "youtb",
+			wantErr: errors.New("internal error"),
+			prepare: func(mockUrlProvider *mocks.MockUrlProvider) {
+				mockUrlProvider.EXPECT().DeleteURL(gomock.Any()).Return(errors.New("unexpected error"))
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStorage := mocks.NewMockUrlProvider(ctrl)
+			tc.prepare(mockStorage)
+
+			r := SetupRouter(mockStorage, config.Config{}, slog.Default())
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/url/%s", tc.alias), nil)
+			req.SetBasicAuth("", "")
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, w.Code, http.StatusOK)
+
+			if tc.wantErr != nil {
+				b := w.Body.String()
+				var response Response
+				require.NoError(t, json.Unmarshal([]byte(b), &response))
+				assert.Equal(t, tc.wantErr.Error(), response.Error)
+			} else {
+				assert.Equal(t, http.StatusOK, w.Code)
 			}
 		})
 	}
