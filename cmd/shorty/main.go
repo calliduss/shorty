@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"net/http"
 	"os"
 	"shorty/internal/config"
 	"shorty/internal/pkg/logger/slo"
@@ -24,7 +25,17 @@ func main() {
 	}
 
 	router := server.SetupRouter(storage, *cfg, log)
-	//todo: run server
+	log.Info("starting server", slog.String("address", cfg.HTTPServer.Address))
+
+	//TODO: add graceful shutdown
+	srv := startHTTPServer(cfg, router)
+
+	err = srv.ListenAndServe()
+	if err != nil {
+		log.Error("failed to start server", slog.String("address", cfg.HTTPServer.Address))
+	}
+
+	log.Error("server stopped", slog.String("address", cfg.HTTPServer.Address))
 }
 
 func setupLogger(env string) *slog.Logger {
@@ -37,4 +48,14 @@ func setupLogger(env string) *slog.Logger {
 		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	return log
+}
+
+func startHTTPServer(cfg *config.Config, router http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         cfg.HTTPServer.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
+	}
 }
