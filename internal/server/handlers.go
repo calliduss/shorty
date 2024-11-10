@@ -45,7 +45,7 @@ const (
 	handlersOperationUpdateAlias = "handlers.url.update"
 )
 
-const aliasLength = 5
+const AliasLength = 5
 
 func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 	var req Request
@@ -86,7 +86,7 @@ func (ro *router) saveAliasHandler(w http.ResponseWriter, r *http.Request) {
 
 	alias := req.Alias
 	if alias == "" {
-		alias = random.GenerateRandomString(aliasLength)
+		alias = random.GenerateRandomString(AliasLength)
 		//TODO: check alias uniqueness
 	}
 
@@ -225,7 +225,7 @@ func (ro *router) updateAliasHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(newAlias) < aliasLength {
+	if len(newAlias) < AliasLength {
 		ro.log.Info("new alias is too short", slog.String("new_alias", newAlias))
 		render.JSON(w, r, resp.Error("invalid request: new alias is too short"))
 
